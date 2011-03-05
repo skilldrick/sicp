@@ -7,7 +7,9 @@
   (hash-ref *op-table* (list op type) #f))
 
 (define (attach-tag type-tag contents)
-  (cons type-tag contents))
+  (if (eq? type-tag 'number)
+      contents
+      (cons type-tag contents)))
 
 (define (type-tag datum)
   (cond ((pair? datum) (car datum))
@@ -16,14 +18,13 @@
          (error "Bad tagged datum -- TYPE-TAG" datum))))
 
 (define (contents datum)
-  (if (pair? datum)
-      (cdr datum)
-      (error "Bad tagged datum -- CONTENTS" datum)))
+  (cond ((pair? datum) (cdr datum))
+        ((number? datum) datum)
+        (else
+         (error "Bad tagged datum -- CONTENTS" datum))))
 
 (define (apply-generic op . args)
   (let ((type-tags (map type-tag args)))
-    (print type-tags)
-    (newline)
     (let ((proc (get op type-tags)))
       (if proc
           (apply proc (map contents args))
@@ -35,13 +36,29 @@
 (define (sub x y) (apply-generic 'sub x y))
 (define (mul x y) (apply-generic 'mul x y))
 (define (div x y) (apply-generic 'div x y))
+(define (equ? x y) (apply-generic 'equ? x y))
+(define (zero? x) (apply-generic 'zero? x))
+
 
 (define (real-part z) (apply-generic 'real-part z))
 (define (imag-part z) (apply-generic 'imag-part z))
 (define (magnitude z) (apply-generic 'magnitude z))
 (define (angle z) (apply-generic 'angle z))
 
-(define (install-rectangular-package)
+(define (install-scheme-number-package)
+  (put 'add '(scheme-number scheme-number) +)
+  (put 'sub '(scheme-number scheme-number) -)
+  (put 'mul '(scheme-number scheme-number) *)
+  (put 'div '(scheme-number scheme-number) /)
+  (put 'equ? '(scheme-number scheme-number) =)
+  (put 'zero? '(scheme-number)
+       (lambda (x) (= 0 x)))
+  'done
+  )
+
+(install-scheme-number-package)
+
+define (install-rectangular-package)
   ;;internal procedures
   (define (real-part z) (car z))
   (define (imag-part z) (cdr z))
@@ -126,6 +143,14 @@
        (lambda (z1 z2) (tag (mul-complex z1 z2))))
   (put 'div '(complex complex)
        (lambda (z1 z2) (tag (div-complex z1 z2))))
+  (put 'equ? '(complex complex)
+       (lambda (z1 z2) (and (= (real-part z1)
+                               (real-part z2))
+                            (= (imag-part z1)
+                               (imag-part z2)))))
+  (put 'zero? '(complex)
+       (lambda (x) (and (= 0 (real-part x))
+                        (= 0 (imag-part x)))))
   (put 'make-from-real-imag 'complex
        (lambda (x y) (tag (make-from-real-imag x y))))
   (put 'make-from-mag-ang 'complex
@@ -137,7 +162,6 @@
   'done)
 
 (install-complex-package)
-
 
 (define (install-rational-package)
   ;;internal procedures
@@ -171,7 +195,12 @@
        (lambda (x y) (tag (mul-rat x y))))
   (put 'div '(rational rational)
        (lambda (x y) (tag (div-rat x y))))
-
+  (put 'equ? '(rational rational)
+       (lambda (x y) (and (= (numer x) (numer y))
+                          (= (denom x) (denom y)))))
+  (put 'zero? '(rational)
+       (lambda (x) (and (= 0 (numer x))
+                        (= 0 (denom x)))))
   (put 'make 'rational
        (lambda (n d) (tag (make-rat n d))))
   'done)
@@ -186,6 +215,10 @@
 (define (make-complex-from-real-imag x y)
   ((get 'make-from-real-imag 'complex) x y))
 
-(real-part (make-complex-from-real-imag 3 4))
+(define (make-complex-from-mag-ang r a)
+  ((get 'make-from-mag-ang 'complex) r a))
 
+(equ? (make-complex-from-real-imag 10 0)
+      (make-complex-from-mag-ang 10 0))
 
+(zero? (make-complex-from-mag-ang 0 5))
