@@ -43,3 +43,7 @@
 (get 'math '+)
 
 (get 'math '-)
+
+(put 'letters 'a 97)
+
+(get 'letters 'a)
