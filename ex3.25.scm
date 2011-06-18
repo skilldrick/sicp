@@ -20,10 +20,12 @@
           (else
            (let ((subtable (assoc (car keys) (cdr table-or-record))))
              (if subtable
-                 (insert-recursive subtable (cdr keys) value)))
-           (let ((new-subtable (cons (car keys) '())))
-             (set-cdr! table-or-record (list new-subtable))
-             (insert-recursive! new-subtable (cdr keys) value)))))
+                 (insert-recursive! subtable (cdr keys) value)
+                 (let ((new-subtable (cons (car keys) '())))
+                   (set-cdr! table-or-record
+                             (cons new-subtable
+                                   (cdr table-or-record)))
+                   (insert-recursive! new-subtable (cdr keys) value)))))))
 
   (let ((local-table (list '*table*)))
     (define (lookup keys)
@@ -47,3 +49,7 @@
 (print)
 
 (get '(a b c d))
+
+(put '(a f g h) 10)
+
+(get '(a f g h))
