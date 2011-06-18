@@ -48,6 +48,5 @@
     (inverter b d)
     (and-gate c d e)
     (inverter e output)))
-    
-
+;;delay will be 3 * inverter-delay + and-gate-delay
   
