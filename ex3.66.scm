@@ -54,6 +54,9 @@
 (define (mul-streams s1 s2)
   (stream-map * s1 s2))
 
+(define (div-streams s1 s2)
+  (stream-map / s1 s2))
+
 (define (scale-stream stream factor)
   (stream-map (lambda (x) (* x factor)) stream))
 
@@ -67,9 +70,35 @@
                  (take (- num 1)
                        (stream-cdr stream)))))
 
-(define (expand num den radix)
-  (cons-stream
-    (quotient (* num radix) den)
-    (expand (remainder (* num radix) den) den radix)))
+(define (interleave s1 s2)
+  (if (stream-null? s1)
+    s2
+    (cons-stream (stream-car s1)
+                 (interleave s2 (stream-cdr s1)))))
 
-(display-stream (take 10 (expand 3 8 10)))
+(define (pairs s t)
+  (cons-stream
+    (list (stream-car s) (stream-car t))
+    (interleave
+      (stream-map (lambda (x) (list (stream-car s) x))
+                  (stream-cdr t))
+      (pairs (stream-cdr s) (stream-cdr t)))))
+
+
+(define (find-index stream item)
+  (define (iter s index)
+    (if (equal? (stream-car s) item)
+      index
+      (iter (stream-cdr s) (+ index 1))))
+  (iter stream 1))
+
+(display-stream (take 10 (pairs integers integers)))
+
+(find-index (pairs integers integers) (list 7 7))
+
+;(index-of (list x x)) => (+
+;                           (*
+;                             (index-of (list (- x 1) (- x 1)))
+;                             2)
+;                           1)
+;(index-of (list 1 1)) => 1

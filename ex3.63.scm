@@ -54,6 +54,9 @@
 (define (mul-streams s1 s2)
   (stream-map * s1 s2))
 
+(define (div-streams s1 s2)
+  (stream-map / s1 s2))
+
 (define (scale-stream stream factor)
   (stream-map (lambda (x) (* x factor)) stream))
 
@@ -67,9 +70,20 @@
                  (take (- num 1)
                        (stream-cdr stream)))))
 
-(define (expand num den radix)
-  (cons-stream
-    (quotient (* num radix) den)
-    (expand (remainder (* num radix) den) den radix)))
+(define (average a b)
+  (/ (+ a b) 2))
 
-(display-stream (take 10 (expand 3 8 10)))
+(define (sqrt-improve guess x)
+  (average guess (/ x guess)))
+
+(define (sqrt-stream x)
+  (define guesses
+    (cons-stream 1.0
+                 (stream-map (lambda (guess)
+                               (sqrt-improve guess x))
+                             guesses)))
+  guesses)
+
+(display-stream (take 10 
+                      (sqrt-stream 2)))
+
