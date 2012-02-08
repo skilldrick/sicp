@@ -138,13 +138,14 @@
 (define (sums-of-squares)
   (define (weight pair)
     (+ (square (car pair)) (square (cadr pair))))
-  (define cube-pairs
+  (define square-pairs
     (weighted-pairs integers integers weight))
   (define (iter s)
       (let ((strcar (stream-car s))
-            (strcdr (stream-cdr s))
-            (strcadr (stream-car (stream-cdr s))))
-        (if (= (weight strcar) (weight strcadr))
+            (strcadr (stream-car (stream-cdr s)))
+            (strcaddr (stream-car (stream-cdr (stream-cdr s))))
+            (strcdr (stream-cdr s)))
+        (if (= (weight strcar) (weight strcadr) (weight strcaddr))
           (cons-stream (list (square (car strcar))
                              "*"
                              (square (cadr strcar))
@@ -152,11 +153,15 @@
                              (square (car strcadr))
                              "*"
                              (square (cadr strcadr))
+                             ","
+                             (square (car strcaddr))
+                             "*"
+                             (square (cadr strcaddr))
                              "="
                              (weight strcar))
                        (iter (stream-cdr strcdr)))
           (iter strcdr))))
-  (iter cube-pairs))
+  (iter square-pairs))
 
 (display-stream (take 10 (sums-of-squares)))
 
