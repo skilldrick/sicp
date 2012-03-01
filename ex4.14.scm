@@ -12,6 +12,7 @@
         ((quoted? exp) (text-of-quotation exp))
         ((assignment? exp) (eval-assignment exp env))
         ((definition? exp) (eval-definition exp env))
+        ((let? exp) (eval (let->combination exp) env))
         ((if? exp) (eval-if exp env))
         ((lambda? exp)
          (make-procedure (lambda-parameters exp)
@@ -41,8 +42,7 @@
              arguments
              (procedure-environment procedure))))
         (else
-          (error
-            ("Unknown procedure type - APPLY" procedure)))))
+          (error "Unknown procedure type - APPLY" procedure))))
 
 (define (list-of-values exps env)
   (if (no-operands? exps)
@@ -206,25 +206,19 @@
                    (sequence->exp (cond-actions first))
                    (expand-clauses rest)))))))
 
+(define (let? exp)
+  (tagged-list? exp 'let))
+
 (define (let->combination exp)
   (define (vars pairs)
     (map car pairs))
   (define (vals pairs)
     (map cadr pairs))
-
-  (if (eq? (length exp) 3)
-    (let ((var (cadr exp))
-          (let-pairs (caddr exp))
-          (body (cdddr exp)))
-      (list 'begin
-            (list 'define var (make-lambda (vars let-pairs) body))
-            (list var (vals let-pairs))))
-    (let ((let-pairs (cadr exp))
-          (body (cddr exp)))
-    (list
-      (make-lambda (vars let-pairs) body)
-      (vals let-pairs)))))
-
+  (let ((let-pairs (cadr exp))
+        (body (cddr exp)))
+    (append
+      (list (make-lambda (vars let-pairs) body))
+      (vals let-pairs))))
 
 (define (let*->nested-lets exp)
   (let ((let-pairs (cadr exp)))
