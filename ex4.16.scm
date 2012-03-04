@@ -13,7 +13,10 @@
         ((assignment? exp) (eval-assignment exp env))
         ((definition? exp) (eval-definition exp env))
         ((let? exp) (eval (let->combination exp) env))
+        ((let*? exp) (eval (let*->nested-lets exp) env))
         ((if? exp) (eval-if exp env))
+        ((and? exp) (eval-and exp env))
+        ((or? exp) (eval-or exp env))
         ((lambda? exp)
          (make-procedure (lambda-parameters exp)
                          (lambda-body exp)
@@ -45,6 +48,12 @@
     '()
     (cons (eval (first-operand exps) env)
           (list-of-values (rest-operands exps) env))))
+
+(define (and? exp)
+  (tagged-list? exp 'and))
+
+(define (or? exp)
+  (tagged-list? exp 'or))
 
 (define (eval-and exp env)
   (let ((first (eval (cadr exp) env)))
@@ -156,7 +165,8 @@
         ((last-exp? seq) (first-exp seq))
         (else (make-begin seq))))
 
-(define (make-begin seq) (cons 'begin seq))
+(define (make-begin seq)
+  (cons 'begin seq))
 
 (define (application? exp) (pair? exp))
 
@@ -196,7 +206,7 @@
                  clauses))
         (if (and (pair? (cond-actions first)) (eq? (car (cond-actions first)) '=>))
           (make-if (cond-predicate first)
-                   ((cadr (cond-actions first)) (cond-predicate first))
+                   (list (cadr (cond-actions first)) (cond-predicate first))
                    (expand-clauses rest))
           (make-if (cond-predicate first)
                    (sequence->exp (cond-actions first))
@@ -216,13 +226,17 @@
       (list (make-lambda (vars let-pairs) body))
       (vals let-pairs))))
 
+(define (let*? exp)
+  (tagged-list? exp 'let*))
+
 (define (let*->nested-lets exp)
-  (let ((let-pairs (cadr exp)))
+  (let ((let-pairs (cadr exp))
+        (let-body (caddr exp)))
     (define (iter pairs)
       (if (null? pairs)
-        '()
+        let-body
         (list 'let
-              (car pairs)
+              (list (car pairs))
               (iter (cdr pairs)))))
     (iter let-pairs)))
 
@@ -233,7 +247,7 @@
   (eq? x #f))
 
 (define (make-procedure parameters body env)
-  (list 'procedure parameters body env))
+  (list 'procedure parameters (scan-out-defines body) env))
 
 (define (compound-procedure? p)
   (tagged-list? p 'procedure))
@@ -241,7 +255,7 @@
 (define (procedure-parameters p) (cadr p))
 
 (define (procedure-body p)
-  (scan-out-defines (caddr p)))
+  (caddr p))
 
 (define (procedure-environment p) (cadddr p))
 
@@ -293,7 +307,8 @@
              (env-loop (enclosing-environment env)))
             ((eq? var (car vars))
              (set-car! vals val))
-            (else (scan (cdr vars) (cdr vals)))))
+            (else
+              (scan (cdr vars) (cdr vals)))))
     (if (eq? env the-empty-environment)
       (error "Unbound variable -- SET!" var)
       (let ((frame (first-frame env)))
@@ -324,11 +339,11 @@
                     (cons
                       ;; the let variables
                       (map (lambda (def)
-                             (list (cadr def) ''*unassigned*))
+                             (list (definition-variable def) ''*unassigned*))
                            list-of-defines)
                       ;; setting the let variables in the let body
                       (append (map (lambda (def)
-                                     (list 'set! (cadr def) (caddr def)))
+                                     (list 'set! (definition-variable def) (definition-value def)))
                                    list-of-defines)
                               ;; the body of the let
                               stripped-body))))))))
@@ -361,12 +376,16 @@
 (define primitive-procedures
   (list (list 'car car)
         (list 'cdr cdr)
+        (list 'cadr cadr)
         (list 'cons cons)
         (list 'null? null?)
         (list '+ +)
         (list '- -)
         (list '/ /)
         (list '* *)
+        (list '> >)
+        (list '< <)
+        (list '= =)
         ;; etc
         ))
 
@@ -415,12 +434,15 @@
 (define (test)
   (define (global-eval input)
     (eval input the-global-environment))
-  (define (assert input expected-output)
+  (define (assert test-name input expected-output)
     (let ((result (global-eval input)))
       (if (equal? result expected-output)
         (display ".")
         (begin
           (display "x")
+          (newline)
+          (display "Failed ")
+          (display test-name)
           (newline)
           (display "input: ")
           (display input)
@@ -432,24 +454,127 @@
           (display result)
           (newline)))))
 
-  (assert '(+ 5 5)
+  (assert "Self-evaluting" '5 5)
+  (global-eval '(define my-var 3))
+  (assert "Variable"
+          'my-var
+          3)
+  (assert "Quoted"
+          ''(1 2 3)
+          '(1 2 3))
+  (global-eval '(define my-new-var 5))
+  (global-eval '(set! my-new-var 7))
+  (assert "Assignment" 'my-new-var 7)
+  (global-eval '(define (func-with-inner-defines x)
+                  (define a (+ x 1))
+                  (define b (* x 2))
+                  (define c (- x 1))
+                  (+ a b c)))
+  (assert "Inner defines"
+          '(func-with-inner-defines 10)
+          40)
+  (global-eval '(define (func-with-inner-func x)
+                  (define (inner-func y)
+                    (* x y))
+                  (inner-func 5)))
+  (assert "Inner function definitions"
+          '(func-with-inner-func 6)
+          30)
+  (global-eval '(define (nested-set x)
+                  (define (inner)
+                    (set! x 10))
+                  (inner)
+                  x))
+  (assert "Assignment to variable in enclosing scope"
+          '(nested-set 5)
           10)
-  (assert '(- 10 5)
+  (global-eval '(define my-new-var "Now I'm a string!"))
+  (assert "Definition of previously defined variable"
+          'my-new-var
+          "Now I'm a string!")
+  (assert "Let"
+          '(let ((x 3))
+             x)
+          3)
+  (assert "Let*"
+          '(let* ((x 3)
+                  (y (+ x 2))
+                  (z (+ x y 5)))
+             (* x z))
+          39)
+  (assert "If consequent"
+          '(if (> 5 3)
+             "Maths works"
+             "Parallel universe")
+          "Maths works")
+  (assert "If alternative"
+          '(if (< 5 3)
+             "Parallel universe"
+             "Maths works")
+          "Maths works")
+  (assert "And (false/false)"
+          '(and (> 1 2) (< 3 1))
+          #f)
+  (assert "And (true/false)"
+          '(and 5 (> 1 2))
+          #f)
+  (assert "And (true/true)"
+          '(and 3 4)
+          4)
+  (assert "Or (false/false)"
+          '(or (> 1 2) (< 3 1))
+          #f)
+  (assert "Or (true/false)"
+          '(or 5 (> 1 2))
+          5)
+  (assert "Or (false/true)"
+          '(or (> 1 2) 5)
+          5)
+  (assert "Or (true/true)"
+          '(or 3 4)
+          3)
+  (assert "Lambda with application"
+          '((lambda (x y)
+              (* x y))
+            3 4)
+          12)
+  (assert "Begin"
+          '(begin
+             (+ 3 4)
+             (let ((x 7)) x)
+             (* 5 6))
+          30)
+  (assert "Cond"
+          '(cond ((> 1 100) "No way!")
+                 ((= 3 5)
+                  "This one has multiple statements"
+                  "Are you crazy?")
+                 ((< 55 5) "Don't be silly.")
+                 ((> 5 3) "Finally, some sense.")
+                 ((= (+ 2 2) 5) "Not unless it's 1984")
+                 ((= (+ 2 2) 4) "This is true as well"))
+          "Finally, some sense.")
+  (assert "Alternative cond"
+          '(cond ((cadr '((a 1) (b 2))) => cadr)
+                 (else false))
+          2)
+  (assert "Application"
+          '(+ 5 5)
+          10)
+  (assert "Application"
+          '(- 10 5)
           5)
   (global-eval '(define (func1 x)
-           (* x 3)))
-  (assert '(func1 3)
+                  (* x 3)))
+  (assert "Function definition and application"
+          '(func1 3)
           9)
   (global-eval '(define (func2 x)
-             (let ((y (* x 2)))
-               (+ x y))))
-  (assert '(func2 2)
+                  (let ((y (* x 2)))
+                    (+ x y))))
+  (assert "Function with let"
+          '(func2 2)
           6)
-  (assert ''(1 2 3)
-          '(1 2 3))
-  (global-eval '(define my-var 3))
-  (assert 'my-var 3)
-
 
   (newline)
 )
