@@ -23,12 +23,9 @@
         ((cond? exp) (eval (cond->if exp) env))
         ((application? exp)
          (meta-apply (eval (operator exp) env)
-                (list-of-values (operands exp) env)))
+                     (list-of-values (operands exp) env)))
         (else
           (error "Unknown expression type - EVAL" exp))))
-
-(define sequence->exp '())
-
 
 (define (meta-apply procedure arguments)
   (cond ((primitive-procedure? procedure)
@@ -154,7 +151,7 @@
 
 (define (rest-exps seq) (cdr seq))
 
-(define (sequence-exp seq)
+(define (sequence->exp seq)
   (cond ((null? seq) seq)
         ((last-exp? seq) (first-exp seq))
         (else (make-begin seq))))
@@ -194,7 +191,7 @@
           (rest (cdr clauses)))
       (if (cond-else-clause? first)
         (if (null? rest)
-          (sequence-exp (cond-actions first))
+          (sequence->exp (cond-actions first))
           (error "ELSE clause isn't last = COND->IF"
                  clauses))
         (if (and (pair? (cond-actions first)) (eq? (car (cond-actions first)) '=>))
@@ -413,4 +410,48 @@
 
 (define the-global-environment (setup-environment))
 
-(driver-loop)
+;(driver-loop)
+
+(define (test)
+  (define (global-eval input)
+    (eval input the-global-environment))
+  (define (assert input expected-output)
+    (let ((result (global-eval input)))
+      (if (equal? result expected-output)
+        (display ".")
+        (begin
+          (display "x")
+          (newline)
+          (display "input: ")
+          (display input)
+          (newline)
+          (display "expected: ")
+          (display expected-output)
+          (newline)
+          (display "result: ")
+          (display result)
+          (newline)))))
+
+  (assert '(+ 5 5)
+          10)
+  (assert '(- 10 5)
+          5)
+  (global-eval '(define (func1 x)
+           (* x 3)))
+  (assert '(func1 3)
+          9)
+  (global-eval '(define (func2 x)
+             (let ((y (* x 2)))
+               (+ x y))))
+  (assert '(func2 2)
+          6)
+  (assert ''(1 2 3)
+          '(1 2 3))
+  (global-eval '(define my-var 3))
+  (assert 'my-var 3)
+
+
+  (newline)
+)
+
+(test)
