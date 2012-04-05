@@ -1,0 +1,6 @@
+(define (a-pythagorean-triple)
+  (let ((c (an-integer-from 1)))
+    (let ((b (an-integer-between 1 c)))
+      (let ((a (an-integer-between 1 b)))
+        (require (= (+ (* a a) (* b b)) (* c c)))
+        (list a b c))))))
