@@ -577,9 +577,14 @@
             (or (and (job ?person (?division . ?rest))
                      (meeting ?division ?day-and-time))
                 (meeting whole-company ?day-and-time)))
+      (rule (?x next-to ?y in (?x ?y . ?u)))
+      (rule (?x next-to ?y in (?v . ?z))
+            (?x next-to ?y in ?z))
 
+      (rule (last-pair (?el) (?el)))
+      (rule (last-pair (?x . ?rest) ?wat)
+            (last-pair ?rest ?wat))
      )))
 
 (setup-database)
 (query-driver-loop)
-
