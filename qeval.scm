@@ -155,6 +155,27 @@
         (delay (apply-rules query-pattern frame))))
     frame-stream))
 
+;(and (manager ?x)
+;     (job ?x)
+;     (blah ?x))
+;
+;(conjoin ((manager ?x) (job ?x) (blah ?x)) '())
+;(conjoin ((job ?x) (blah ?x)) stream-of-manager-frames)
+;(conjoin ((blah ?x)) (qeval (job ?x) stream-of-manager-frames))
+;(conjoin ((blah ?x)) stream-of-manager-and-job-frames)
+;(conjoin () (qeval (blah ?x) stream-of-manage-and-job-frames))
+;stream-of-manager-and-job-and-blah-frames
+;
+;(conjoin ((manager ?x) (job ?x) (blah ?x)) '())
+;(conjoin ((job ?x) (blah ?x)) (unify (qeval (manager ?x) '()) '())
+;(conjoin ((job ?x) (blah ?x)) stream-of-manager-frames)
+;(conjoin ((blah ?x)) (unify (qeval (job ?x) ()) stream-of-manager-frames))
+;(conjoin ((blah ?x)) (unify stream-of-job-frames stream-of-manager-frames))
+;(conjoin ((blah ?x)) stream-of-job-and-manager-frames)
+;(conjoin () (unify stream-of-blah-frames stream-of-job-and-manager-frames))
+;(conjoin () stream-of-job-and-manage-and-blah-frames)
+;stream-of-job-and-manage-and-blah-frames
+
 (define (conjoin conjuncts frame-stream)
   (if (empty-conjunction? conjuncts)
     frame-stream
@@ -162,7 +183,27 @@
              (qeval (first-conjunct conjuncts)
                     frame-stream))))
 
-(put 'and 'qeval conjoin)
+(define (merge-if-consistent frame-1 frame-2)
+  ;merge frames if consistent
+  )
+
+(define (find-compatible-frames frame-stream-1 frame-stream-2)
+  (stream-flatmap (lambda (frame-1)
+                    (stream-flatmap (lambda (frame-2)
+                                      (merge-if-consistent frame-1 frame-2))
+                                    frame-stream-2))
+                  frame-stream-1))
+
+(define (quick-conjoin conjuncts frame-stream)
+  (if (empty-conjunction? conjuncts)
+    frame-stream
+    (quick-conjoin (rest-conjuncts conjuncts)
+                   (find-compatible-frames
+                     (qeval (first-conjunct conjuncts)
+                            (singleton-stream '()))
+                     frame-stream))))
+
+(put 'and 'qeval quick-conjoin)
 
 (define (disjoin disjuncts frame-stream)
   (if (empty-disjunction? disjuncts)
