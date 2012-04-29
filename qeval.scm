@@ -84,6 +84,13 @@
         (else
           (stream-filter pred (stream-cdr stream)))))
 
+(define (stream-length stream)
+  (define (iter len str)
+    (if (stream-null? str)
+      len
+      (iter (+ len 1) (stream-cdr str))))
+  (iter 0 stream))
+
 
 
 (define *op-table* (make-hash))
@@ -181,6 +188,18 @@
 (define (always-true ignore frame-stream) frame-stream)
 
 (put 'always-true 'qeval always-true)
+
+(define (uniquely-asserted contents frame-stream)
+  (stream-flatmap
+    (lambda (frame)
+      (let ((newstream (qeval (car contents)
+                              (singleton-stream frame))))
+        (if (= 1 (stream-length newstream))
+          newstream
+          the-empty-stream)))
+    frame-stream))
+
+(put 'unique 'qeval uniquely-asserted)
 
 (define (find-assertions pattern frame)
   (stream-flatmap
@@ -601,6 +620,7 @@
       (rule (son ?father ?son)
             (and (wife ?father ?mother)
                  (son ?mother ?son)))
+
 
      )))
 
