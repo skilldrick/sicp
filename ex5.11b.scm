@@ -267,14 +267,18 @@
   (let ((reg (get-register machine
                            (stack-inst-reg-name inst))))
     (lambda ()
-      (push stack (get-contents reg))
+      (push stack (cons reg (get-contents reg)))
       (advance-pc pc))))
 
 (define (make-restore inst machine stack pc)
   (let ((reg (get-register machine
                            (stack-inst-reg-name inst))))
     (lambda ()
-      (set-contents! reg (pop stack))
+      (let ((stack-val (pop stack)))
+        (if (eq? (car stack-val)
+                 reg)
+          (set-contents! reg (cdr stack-val))
+          (error "Stack register mismatch")))
       (advance-pc pc))))
 
 (define (stack-inst-reg-name stack-instruction)
