@@ -1,11 +1,21 @@
+#lang r5rs
+
+(define (error . args)
+  (display args))
+
+(define (tagged-list? exp tag)
+  (if (pair? exp)
+    (eq? (car exp) tag)
+    #f))
+
 (define (make-machine register-names ops controller-text)
   (let ((machine (make-new-machine)))
     (for-each (lambda (register-name)
-                ((machine 'allocation-register) register-name))
+                ((machine 'allocate-register) register-name))
               register-names)
     ((machine 'install-operations) ops)
     ((machine 'install-instruction-sequence)
-     (assember controller-text machine))
+     (assemble controller-text machine))
     machine))
 
 (define (make-register name)
@@ -25,28 +35,28 @@
   ((register 'set) value))
 
 (define (make-stack)
-  (let ((s '())
-        (define (push x)
-          (set! s (cons x s)))
-        (define (pop)
-          (if (null? s)
-            (error "Empty stack -- POP")
-            (let ((top (car s)))
-              (set! s (cdr s))
-              top)))
-        (define (initialize)
-          (set! s '())
-          'done)
-        (define (dispatch message)
-          (cond ((eq? message 'push) push)
-                ((eq? message 'pop) (pop))
-                ((eq? message 'initialize) (initialize))
-                (else (error "Unknown request -- STACK"
-                             message))))
-        dispatch)))
+  (let ((s '()))
+    (define (push x)
+      (set! s (cons x s)))
+    (define (pop)
+      (if (null? s)
+        (error "Empty stack -- POP")
+        (let ((top (car s)))
+          (set! s (cdr s))
+          top)))
+    (define (initialize)
+      (set! s '())
+      'done)
+    (define (dispatch message)
+      (cond ((eq? message 'push) push)
+            ((eq? message 'pop) (pop))
+            ((eq? message 'initialize) (initialize))
+            (else (error "Unknown request -- STACK"
+                         message))))
+    dispatch))
 
 (define (pop stack)
-  stack 'pop))
+  (stack 'pop))
 
 (define (push stack value)
   ((stack 'push) value))
@@ -90,10 +100,10 @@
         (let ((insts (get-contents pc)))
           (if (null? insts)
             'done
-            (begine
+            (begin
               ((instruction-execution-proc (car insts)))
               (execute)))))
-      (define (dispatch messsage)
+      (define (dispatch message)
         (cond ((eq? message 'start)
                (set-contents! pc the-instruction-sequence)
                (execute))
@@ -125,7 +135,7 @@
                                    (cons (make-label-entry next-inst
                                                            insts)
                                          labels))
-                          (receive (cons (make-instruction next-ins)
+                          (receive (cons (make-instruction next-inst)
                                          insts)
                                    labels)))))))
 
@@ -150,7 +160,7 @@
   (car inst))
 
 (define (instruction-execution-proc inst)
-  (cd inst))
+  (cdr inst))
 
 (define (set-instruction-execution-proc! inst proc)
   (set-cdr! inst proc))
@@ -175,7 +185,7 @@
         ((eq? (car inst) 'goto)
          (make-goto inst machine labels pc))
         ((eq? (car inst) 'save)
-         (make-svae inst machine stack pc))
+         (make-save inst machine stack pc))
         ((eq? (car inst) 'restore)
          (make-restore inst machine stack pc))
         ((eq? (car inst) 'perform)
@@ -183,7 +193,7 @@
         (else (error "Unknown instruction type -- ASSEMBLE"
                      inst))))
 
-(define (make-assign inst machine labels operatins pc)
+(define (make-assign inst machine labels operations pc)
   (let ((target
           (get-register machine (assign-reg-name inst)))
         (value-exp (assign-value-exp inst)))
@@ -206,7 +216,7 @@
 (define (advance-pc pc)
   (set-contents! pc (cdr (get-contents pc))))
 
-(define (make-test inst machine lables operations flag pc)
+(define (make-test inst machine labels operations flag pc)
   (let ((condition (test-condition inst)))
     (if (operation-exp? condition)
       (let ((condition-proc
@@ -299,7 +309,7 @@
         (else
           (error "Unknown expression type -- ASSEMBLE" exp))))
 
-(define (register-exp exp) (tagged-list? exp 'reg))
+(define (register-exp? exp) (tagged-list? exp 'reg))
 
 (define (register-exp-reg exp) (cadr exp))
 
@@ -338,3 +348,99 @@
       (cadr val)
       (error "Unknown operation -- ASSEMBLE" symbol))))
 
+
+
+
+
+
+(define (test-make-machine)
+  (define (assert-equal a b message)
+    (if (not (eq? a b))
+      (begin
+        (error a "is not equal to" b)
+        (error message))))
+
+  (define gcd-machine
+    (make-machine
+      '(a b t)
+      (list (list 'rem remainder) (list '= =))
+      '(test-b
+         (test (op =) (reg b) (const 0))
+         (branch (label gcd-done))
+         (assign t (op rem) (reg a) (reg b))
+         (assign a (reg b))
+         (assign b (reg t))
+         (goto (label test-b))
+         gcd-done)))
+
+  (set-register-contents! gcd-machine 'a 206)
+  (set-register-contents! gcd-machine 'b 40)
+  (start gcd-machine)
+  (assert-equal (get-register-contents gcd-machine 'a) 2 "GCD machine broken")
+
+  (define fib-machine
+    (make-machine
+      '(n val continue)
+      (list (list '< <) (list '- -) (list '+ +))
+      '((assign continue (label fib-done))
+        fib-loop
+        (test (op <) (reg n) (const 2))
+        (branch (label immediate-answer))
+
+        (save continue)
+        (assign continue (label afterfib-n-1))
+        (save n)
+        (assign n (op -) (reg n) (const 1))
+        (goto (label fib-loop))
+        afterfib-n-1
+        (restore n)
+        (restore continue)
+
+        (assign n (op -) (reg n) (const 2))
+        (save continue)
+        (assign continue (label afterfib-n-2))
+        (save val)
+        (goto (label fib-loop))
+        afterfib-n-2
+        (assign n (reg val))
+        (restore val)
+        (restore continue)
+        (assign val (op +) (reg val) (reg n))
+        (goto (reg continue))
+        immediate-answer
+        (assign val (reg n))
+        (goto (reg continue))
+        fib-done)))
+
+  (set-register-contents! fib-machine 'n 10)
+  (start fib-machine)
+  (assert-equal (get-register-contents fib-machine 'val) 55 "Fib machine broken")
+
+  (define expt-machine
+    (make-machine
+      '(continue b n val)
+      (list (list '= =) (list '* *) (list '- -))
+      '((assign continue (label expt-done))
+        expt-loop
+        (test (op =) (reg n) (const 0))
+        (branch (label base-case))
+        (save continue)
+        (assign n (op -) (reg n) (const 1))
+        (assign continue (label after-expt))
+        (goto (label expt-loop))
+        after-expt
+        (restore continue)
+        (assign val (op *) (reg b) (reg val))
+        (goto (reg continue))
+        base-case
+        (assign val (const 1))
+        (goto (reg continue))
+        expt-done)))
+
+  (set-register-contents! expt-machine 'b 3)
+  (set-register-contents! expt-machine 'n 4)
+  (start expt-machine)
+  (assert-equal (get-register-contents expt-machine 'val) 81 "Expt machine broken")
+  )
+
+(test-make-machine)
