@@ -93,7 +93,8 @@
   (let ((pc (make-register 'pc))
         (flag (make-register 'flag))
         (stack (make-stack))
-        (the-instruction-sequence '()))
+        (the-instruction-sequence '())
+        (instruction-counter 0))
     (let ((the-ops
             (list (list 'initialize-stack
                         (lambda () (stack 'initialize)))
@@ -118,6 +119,7 @@
           (if (null? insts)
             'done
             (begin
+              (set! instruction-counter (+ 1 instruction-counter))
               ((instruction-execution-proc (car insts)))
               (execute)))))
       (define (dispatch message)
@@ -132,6 +134,9 @@
                (lambda (ops) (set! the-ops (append the-ops ops))))
               ((eq? message 'stack) stack)
               ((eq? message 'operations) the-ops)
+              ((eq? message 'initialize-counter)
+               (lambda () (set! instruction-counter 0)))
+              ((eq? message 'get-counter) instruction-counter)
               (else (error "Unknown request -- MACHINE" message))))
       dispatch)))
 
@@ -487,17 +492,8 @@
   (set-register-contents! fact-machine 'n 5)
   (start fact-machine)
   (assert-equal (get-register-contents fact-machine 'val) 120 "Fact machine broken")
-
-  (define (loop n)
-    (if (< n 10)
-      (begin
-        (newline)
-        (newline)
-        (display (list 'n n))
-        (set-register-contents! fact-machine 'n n)
-        (start fact-machine)
-        (loop (+ n 1)))))
-  (loop 2)
+  (newline)
+  (display (list 'fact-machine 'counter (fact-machine 'get-counter)))
 
   )
 
