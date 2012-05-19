@@ -94,12 +94,17 @@
         (flag (make-register 'flag))
         (stack (make-stack))
         (the-instruction-sequence '())
-        (instruction-counter 0))
+        (instruction-counter 0)
+        (tracing-on? #f))
     (let ((the-ops
             (list (list 'initialize-stack
                         (lambda () (stack 'initialize)))
                   (list 'print-stack-statistics
-                        (lambda () (stack 'print-statistics)))))
+                        (lambda () (stack 'print-statistics)))
+                  (list 'trace-on
+                        (lambda () (set! tracing-on? #t)))
+                  (list 'trace-off
+                        (lambda () (set! tracing-on? #f)))))
           (register-table
             (list (list 'pc pc) (list 'flag flag))))
       (define (allocate-register name)
@@ -119,6 +124,8 @@
           (if (null? insts)
             'done
             (begin
+              (if tracing-on?
+                (trace-instruction (car insts)))
               (set! instruction-counter (+ 1 instruction-counter))
               ((instruction-execution-proc (car insts)))
               (execute)))))
@@ -139,6 +146,10 @@
               ((eq? message 'get-counter) instruction-counter)
               (else (error "Unknown request -- MACHINE" message))))
       dispatch)))
+
+(define (trace-instruction inst)
+  (newline)
+  (display (instruction-text inst)))
 
 (define (assemble controller-text machine)
   (extract-labels controller-text
@@ -479,9 +490,11 @@
         (assign continue (label after-fact))
         (goto (label fact-loop))
         after-fact
+        (perform (op trace-on))
         (restore n)
         (restore continue)
         (assign val (op *) (reg n) (reg val))
+        (perform (op trace-off))
         (goto (reg continue))
         base-case
         (assign val (const 1))
@@ -495,6 +508,9 @@
   (newline)
   (display (list 'fact-machine 'counter (fact-machine 'get-counter)))
 
+  ;; Add tracing now (5.16) (in this commit)
+  ;; Each instruction contains the instruction text so all we need to do is check tracing is on
+  ;; then print the instruction text
   )
 
 (test-make-machine)
