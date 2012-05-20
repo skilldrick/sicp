@@ -19,11 +19,37 @@
     machine))
 
 (define (make-register name)
-  (let ((contents '*unassigned*))
+  (let ((contents '*unassigned*)
+        (tracing-on? #f))
+    (define (display-get value)
+      (newline)
+      (display 'get)
+      (display-register value))
+    (define (display-set before after)
+      (newline)
+      (display 'set)
+      (display " before: ")
+      (display-register before)
+      (display " after: ")
+      (display-register after))
+    (define (display-register value)
+      (display (list name '= (if (pair? value)
+                               (instruction-text (car value))
+                               value))))
     (define (dispatch message)
-      (cond ((eq? message 'get) contents)
+      (cond ((eq? message 'get)
+             (if tracing-on?
+               (display-get contents))
+             contents)
             ((eq? message 'set)
-             (lambda (value) (set! contents value)))
+             (lambda (value)
+               (if tracing-on?
+                 (display-set contents value))
+               (set! contents value)))
+            ((eq? message 'trace-on)
+             (set! tracing-on? #t))
+            ((eq? message 'trace-off)
+             (set! tracing-on? #f))
             (else
               (error "Unknown request -- REGISTER" message))))
     dispatch))
@@ -129,6 +155,12 @@
               (set! instruction-counter (+ 1 instruction-counter))
               ((instruction-execution-proc (car insts)))
               (execute)))))
+      (set! the-ops ;;add more ops in this scope because we need access to registers
+        (append the-ops
+                (list (list 'reg-trace-on
+                            (lambda (reg) ((lookup-register reg) 'trace-on)))
+                      (list 'reg-trace-off
+                            (lambda (reg) ((lookup-register reg) 'trace-off))))))
       (define (dispatch message)
         (cond ((eq? message 'start)
                (set-contents! pc the-instruction-sequence)
@@ -495,11 +527,13 @@
         (restore continue)
         (assign val (op *) (reg n) (reg val))
         (perform (op trace-off))
+        (perform (op reg-trace-on) (const val))
         (goto (reg continue))
         base-case
         (assign val (const 1))
         (goto (reg continue))
         fact-done
+        (perform (op reg-trace-off) (const val))
         (perform (op print-stack-statistics)))))
 
   (set-register-contents! fact-machine 'n 5)
